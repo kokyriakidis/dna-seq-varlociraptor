@@ -1,5 +1,5 @@
 channels:
   - conda-forge
-  - bioconda
+  - nodefaults
 dependencies:
-    - bwa =0.7.17
+  - curl =7.86.0

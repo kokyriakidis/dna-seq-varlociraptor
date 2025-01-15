@@ -11,6 +11,17 @@ rule bcf_index:
         "bcftools index {input} 2> {log}"
 
 
+rule bcf_to_vcf_gz:
+    input:
+        "{prefix}.bcf",
+    output:
+        "{prefix}.vcf.gz",
+    log:
+        "logs/bcf-to-vcf/{prefix}.log",
+    wrapper:
+        "v2.3.2/bio/bcftools/view"
+
+
 rule bam_index:
     input:
         "{prefix}.bam",
@@ -19,7 +30,7 @@ rule bam_index:
     log:
         "logs/bam-index/{prefix}.log",
     wrapper:
-        "0.59.2/bio/samtools/index"
+        "v2.3.2/bio/samtools/index"
 
 
 rule tabix_known_variants:
@@ -31,29 +42,6 @@ rule tabix_known_variants:
         "logs/tabix/{prefix}.{format}.log",
     params:
         get_tabix_params,
-    cache: True
+    cache: "omit-software"
     wrapper:
-        "0.59.2/bio/tabix"
-
-
-rule testcase:
-    input:
-        obs=get_group_observations,
-        scenario="results/scenarios/{group}.yaml",
-    output:
-        directory("resources/testcases/{group}.{caller}/{locus}"),
-    log:
-        "logs/varlociraptor/testcase/{group}.{caller}.{locus}.log",
-    params:
-        obs=lambda w, input: [
-            "{}={}".format(s, f) for s, f in zip(get_group_aliases(w), input.obs)
-        ],
-        parent=lambda w, output: os.path.dirname(output[0]),
-    threads: workflow.cores
-    conda:
-        "../envs/varlociraptor.yaml"
-    shell:
-        "varlociraptor "
-        "call variants --testcase-prefix {output} --testcase-locus {wildcards.locus} "
-        "generic --obs {params.obs} "
-        "--scenario {input.scenario} 2> {log}"
+        "v2.3.2/bio/tabix/index"

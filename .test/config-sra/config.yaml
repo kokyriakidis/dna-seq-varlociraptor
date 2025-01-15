@@ -5,32 +5,34 @@ units: config-sra/units.tsv
 ref:
   # Number of chromosomes to consider for calling.
   # The first n entries of the FASTA will be considered.
-  n_chromosomes: 25
+  n_chromosomes: 17
   # Ensembl species name
   species: saccharomyces_cerevisiae
   # Ensembl release
-  release: 100
+  release: 110
   # Genome build
   build: R64-1-1
+  pangenome:
+    activate: false
+    vcf: ""
 
 primers:
   trimming:
-    activate: false
     primers_fa1: ""
     primers_fa2: ""
     library_length: 0
 
 # Estimation of tumor mutational burden.
 mutational_burden:
-  activate: false
-  # Size of the sequenced coding genome for TMB estimation
-  # Attention: when doing panel sequencing, set this to the
-  # CAPTURED coding genome, not the entire one!
-  coding_genome_size: 3.0e7
+  activate: true
   events:
-    - SOMATIC_TUMOR_LOW
-    - SOMATIC_TUMOR_MEDIUM
-    - SOMATIC_TUMOR_HIGH
+    - changed_only
+
+# Plotting of known mutational signatures
+mutational_signatures:
+  activate: false
+  events:
+    - some_id
 
 calling:
   delly:
@@ -41,25 +43,36 @@ calling:
   scenario: config-sra/scenario.yaml
   # See http://snpeff.sourceforge.net/SnpSift.html#filter
   filter:
+    candidates: "ANN['IMPACT'] in ['MODERATE', 'HIGH']"
     moderate: "ANN['IMPACT'] == 'MODERATE'"
   fdr-control:
     threshold: 0.05
+    local: true
     events: 
       present:
         varlociraptor: 
-          - "PRESENT"
+          - base_only
+          - changed_only
+          - both
         filter:
           - moderate
+        desc: Variants with moderate impact
 
 annotations:
   dbnsfp:
     activate: false
   vcfs:
-    activate: true
+    activate: false
     known: resources/variation.vcf.gz
   dgidb:
     activate: false
-
+  vep:
+    candidate_calls:
+      params: "--fields IMPACT"
+      plugins: []
+    final_calls:
+      params: "--fields IMPACT"
+      plugins: []
 
 params:
   cutadapt: ""
@@ -77,9 +90,12 @@ params:
     call: ""
     # Add extra arguments for varlociraptor preprocess. By default, we limit the depth to 200.
     # Increase this value for panel sequencing!
-    preprocess: "--max-depth 200"
+    preprocess: "--max-depth 50"
   freebayes:
-    min_alternate_fraction: 0.05 # Reduce for calling variants with lower VAFs
+    min_alternate_fraction: 0.4 # Reduce for calling variants with lower VAFs
+
+gene_coverage:
+  min_avg_coverage: 8
 
 report:
   activate: false
@@ -87,3 +103,18 @@ report:
   stratify:
     activate: false
     by-column: condition
+
+tables:
+  activate: false
+  # vembrane expression to generate the table
+  output:
+    expression: "INDEX, CHROM, POS, REF, ALT[0], ANN['Consequence'], ANN['IMPACT'], ANN['SYMBOL'], ANN['Feature']"
+    genotype: true
+    coverage: true
+    event_prob: true
+  generate_excel: true
+  
+custom_alignment_properties:
+  activate: false
+  column: "panel"
+  tsv: ""

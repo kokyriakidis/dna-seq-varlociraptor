@@ -1,6 +1,6 @@
 rule get_genome:
     output:
-        "resources/genome.fasta",
+        genome,
     log:
         "logs/get-genome.log",
     params:
@@ -8,33 +8,34 @@ rule get_genome:
         datatype="dna",
         build=config["ref"]["build"],
         release=config["ref"]["release"],
-    cache: True
+        chromosome=config["ref"].get("chromosome"),
+    cache: "omit-software"
     wrapper:
-        "0.59.2/bio/reference/ensembl-sequence"
+        "v2.3.2/bio/reference/ensembl-sequence"
 
 
 rule genome_faidx:
     input:
-        "resources/genome.fasta",
+        genome,
     output:
-        "resources/genome.fasta.fai",
+        genome_fai,
     log:
         "logs/genome-faidx.log",
-    cache: True
+    cache: "omit-software"
     wrapper:
-        "0.59.2/bio/samtools/faidx"
+        "v2.3.2/bio/samtools/faidx"
 
 
 rule genome_dict:
     input:
-        "resources/genome.fasta",
+        genome,
     output:
-        "resources/genome.dict",
+        genome_dict,
     log:
         "logs/samtools/create_dict.log",
     conda:
         "../envs/samtools.yaml"
-    cache: True
+    cache: "omit-software"
     shell:
         "samtools dict {input} > {output} 2> {log} "
 
@@ -42,7 +43,7 @@ rule genome_dict:
 rule get_known_variants:
     input:
         # use fai to annotate contig lengths for GATK BQSR
-        fai="resources/genome.fasta.fai",
+        fai=genome_fai,
     output:
         vcf="resources/variation.vcf.gz",
     log:
@@ -52,9 +53,48 @@ rule get_known_variants:
         release=config["ref"]["release"],
         build=config["ref"]["build"],
         type="all",
-    cache: True
+        chromosome=config["ref"].get("chromosome"),
+    cache: "omit-software"
     wrapper:
-        "0.59.2/bio/reference/ensembl-variation"
+        "v3.7.0/bio/reference/ensembl-variation"
+
+
+rule get_annotation:
+    output:
+        "resources/annotation.gtf",
+    params:
+        species=config["ref"]["species"],
+        release=config["ref"]["release"],
+        build=config["ref"]["build"],
+        flavor="",  # optional, e.g. chr_patch_hapl_scaff, see Ensembl FTP.
+    log:
+        "logs/get_annotation.log",
+    cache: "omit-software"  # save space and time with between workflow caching (see docs)
+    wrapper:
+        "v2.3.2/bio/reference/ensembl-annotation"
+
+
+rule determine_coding_regions:
+    input:
+        "resources/annotation.gtf",
+    output:
+        "resources/coding_regions.bed.gz",
+    log:
+        "logs/determine_coding_regions.log",
+    cache: "omit-software"  # save space and time with between workflow caching (see docs)
+    conda:
+        "../envs/awk.yaml"
+    shell:
+        # filter for `exon` entries, but unclear how to exclude pseudogene exons...
+        """
+        ( cat {input} | \\
+          awk 'BEGIN {{ IFS = "\\t"}} {{ if ($3 == "exon") {{ print $0 }} }}' | \\
+          grep 'transcript_biotype "protein_coding"' | \\
+          grep 'gene_biotype "protein_coding"' | \\
+          awk 'BEGIN {{ IFS = "\\t"; OFS = "\\t"}}  {{ print $1,$4-1,$5 }}' | \\
+          gzip > {output} \\
+        ) 2> {log}
+        """
 
 
 rule remove_iupac_codes:
@@ -66,23 +106,21 @@ rule remove_iupac_codes:
         "logs/fix-iupac-alleles.log",
     conda:
         "../envs/rbt.yaml"
-    cache: True
+    cache: "omit-software"
     shell:
         "(rbt vcf-fix-iupac-alleles < {input} | bcftools view -Oz > {output}) 2> {log}"
 
 
 rule bwa_index:
     input:
-        "resources/genome.fasta",
+        genome,
     output:
-        multiext("resources/genome.fasta", ".amb", ".ann", ".bwt", ".pac", ".sa"),
+        idx=multiext(genome, ".amb", ".ann", ".bwt", ".pac", ".sa"),
     log:
         "logs/bwa_index.log",
-    resources:
-        mem_mb=369000,
     cache: True
     wrapper:
-        "0.59.2/bio/bwa/index"
+        "v2.3.2/bio/bwa/index"
 
 
 rule get_vep_cache:
@@ -94,8 +132,9 @@ rule get_vep_cache:
         release=config["ref"]["release"],
     log:
         "logs/vep/cache.log",
+    cache: "omit-software"
     wrapper:
-        "0.85.0/bio/vep/cache"
+        "v3.3.5/bio/vep/cache"
 
 
 rule get_vep_plugins:
@@ -106,4 +145,61 @@ rule get_vep_plugins:
     log:
         "logs/vep/plugins.log",
     wrapper:
-        "0.85.0/bio/vep/plugins"
+        "v3.3.5/bio/vep/plugins"
+
+
+rule get_pangenome_haplotypes:
+    output:
+        f"{pangenome_prefix}.vcf.gz",
+    params:
+        url=config["ref"]["pangenome"]["vcf"],
+    log:
+        "logs/pangenome/haplotypes.log",
+    cache: "omit-software"
+    shell:
+        "curl -o {output} {params.url} 2> {log}"
+
+
+rule rename_haplotype_contigs:
+    input:
+        f"{pangenome_prefix}.vcf.gz",
+    output:
+        "resources/haplotype_contigs_renamed.tsv",
+    params:
+        expressions=config["ref"]["pangenome"].get("rename_expressions", []),
+    log:
+        "logs/pangenome/chrom_replacement.log",
+    cache: "omit-software"
+    conda:
+        "../envs/pysam.yaml"
+    script:
+        "../scripts/rename_contigs.py"
+
+
+rule rename_haplotype_chroms:
+    input:
+        vcf="resources/{pangenome}.vcf.gz",
+        tsv="resources/haplotype_contigs_renamed.tsv",
+    output:
+        "resources/{pangenome}.renamed.vcf.gz",
+    log:
+        "logs/pangenome/{pangenome}_renamed.log",
+    cache: "omit-software"
+    conda:
+        "../envs/bcftools.yaml"
+    shell:
+        "bcftools annotate --rename-chrs {input.tsv} {input.vcf} -Oz -o {output} 2> {log}"
+
+
+rule vg_autoindex:
+    input:
+        ref=genome,
+        vcf=get_vg_autoindex_vcf(),
+    output:
+        multiext(pangenome_prefix, ".giraffe.gbz", ".dist", ".min"),
+    log:
+        "logs/vg/autoindex/pangenome.log",
+    cache: "omit-software"
+    threads: max(workflow.cores, 1)
+    wrapper:
+        "v5.3.0/bio/vg/autoindex"

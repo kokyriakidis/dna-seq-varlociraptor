@@ -1,45 +1,50 @@
 rule filter_candidates_by_annotation:
     input:
-        "results/candidate-calls/{group}.{caller}.{scatteritem}.annotated.bcf",
+        bcf="results/candidate-calls/{group}.{caller}.{scatteritem}.annotated.bcf",
+        aux=get_candidate_filter_aux_files(),
     output:
         "results/candidate-calls/{group}.{caller}.{scatteritem}.filtered.bcf",
     log:
         "logs/filter-calls/annotation/{group}.{caller}.{scatteritem}.log",
     params:
-        filter=lambda w: config["calling"]["filter"]["candidates"],
+        filter=get_candidate_filter_expression,
+        aux=get_candidate_filter_aux(),
     conda:
         "../envs/vembrane.yaml"
     shell:
         "(bcftools norm -Ou --do-not-normalize --multiallelics -any {input} | "
-        "vembrane filter {params.filter:q} --output-fmt bcf --output {output}) &> {log}"
+        'vembrane filter {params.aux} "{params.filter}" | bcftools sort -Ob > {output}) &> {log}'
 
 
 rule filter_by_annotation:
     input:
-        get_annotated_bcf,
+        bcf=get_annotated_bcf,
+        csi=partial(get_annotated_bcf, index=True),
+        aux=get_annotation_filter_aux_files,
     output:
-        "results/calls/{group}.{event}.{scatteritem}.filtered_ann.bcf",
+        "results/calls/{group}.{event}.{calling_type}.{scatteritem}.filtered_ann.bcf",
     log:
-        "logs/filter-calls/annotation/{group}.{event}.{scatteritem}.log",
+        "logs/filter-calls/annotation/{group}.{event}.{calling_type}.{scatteritem}.log",
     params:
-        filter=get_annotation_filter,
+        filter=get_annotation_filter_expression,
+        aux=get_annotation_filter_aux,
     conda:
         "../envs/vembrane.yaml"
     shell:
-        "vembrane filter {params.filter:q} {input} --output-fmt bcf --output {output} &> {log}"
+        'vembrane filter {params.aux} "{params.filter}" {input.bcf} --output-fmt bcf --output {output} &> {log}'
 
 
 rule filter_odds:
     input:
-        "results/calls/{group}.{event}.{scatteritem}.filtered_ann.bcf",
+        "results/calls/{group}.{event}.{calling_type}.{scatteritem}.filtered_ann.bcf",
     output:
-        "results/calls/{group}.{event}.{scatteritem}.filtered_odds.bcf",
+        "results/calls/{group}.{event}.{calling_type}.{scatteritem}.filtered_odds.bcf",
     params:
         events=lambda wc: config["calling"]["fdr-control"]["events"][wc.event][
             "varlociraptor"
         ],
     log:
-        "logs/filter-calls/posterior_odds/{group}.{event}.{scatteritem}.log",
+        "logs/filter-calls/posterior_odds/{group}.{event}.{calling_type}.{scatteritem}.log",
     conda:
         "../envs/varlociraptor.yaml"
     shell:
@@ -51,28 +56,28 @@ rule gather_calls:
         calls=get_gather_calls_input(),
         idx=get_gather_calls_input(ext="bcf.csi"),
     output:
-        "results/calls/{group}.{event}.filtered_{by}.bcf",
+        "results/calls/{group}.{event}.{calling_type}.filtered_{by}.bcf",
     log:
-        "logs/gather-calls/{group}.{event}.filtered_{by}.log",
+        "logs/gather-calls/{group}.{event}.{calling_type}.filtered_{by}.log",
     params:
-        "-a -Ob",
+        extra="-a",
     wrapper:
-        "0.67.0/bio/bcftools/concat"
+        "v2.3.2/bio/bcftools/concat"
 
 
 rule control_fdr:
     input:
         get_control_fdr_input,
     output:
-        "results/calls/{group}.{vartype}.{event}.fdr-controlled.bcf",
+        "results/calls/{group}.{vartype}.{event}.{calling_type}.fdr-controlled.bcf",
     log:
-        "logs/control-fdr/{group}.{vartype}.{event}.log",
+        "logs/control-fdr/{group}.{vartype}.{event}.{calling_type}.log",
     params:
         query=get_fdr_control_params,
     conda:
         "../envs/varlociraptor.yaml"
     shell:
-        "varlociraptor filter-calls control-fdr {input} {params.query[local]} --var {wildcards.vartype} "
+        "varlociraptor filter-calls control-fdr {input} {params.query[mode]} --var {wildcards.vartype} "
         "--events {params.query[events]} --fdr {params.query[threshold]} > {output} 2> {log}"
 
 
@@ -81,10 +86,23 @@ rule merge_calls:
         calls=get_merge_calls_input("bcf"),
         idx=get_merge_calls_input("bcf.csi"),
     output:
-        "results/final-calls/{group}.{event}.fdr-controlled.bcf",
+        "results/final-calls/{group}.{event}.{calling_type}.fdr-controlled.bcf",
     log:
-        "logs/merge-calls/{group}.{event}.log",
+        "logs/merge-calls/{group}.{event}.{calling_type}.log",
     params:
-        "-a -Ob",
+        extra="-a",
     wrapper:
-        "0.59.2/bio/bcftools/concat"
+        "v2.3.2/bio/bcftools/concat"
+
+
+rule convert_phred_scores:
+    input:
+        "results/final-calls/{group}.{event}.{calling_type}.fdr-controlled.bcf",
+    output:
+        "results/final-calls/{group}.{event}.{calling_type}.fdr-controlled.normal-probs.bcf",
+    log:
+        "logs/convert-phred-scores/{group}.{event}.{calling_type}.log",
+    conda:
+        "../envs/varlociraptor.yaml"
+    shell:
+        "varlociraptor decode-phred < {input} > {output} 2> {log}"
