@@ -12,10 +12,12 @@ ref:
   release: 100
   # Genome build
   build: GRCh38
+  pangenome:
+    activate: false  
+    vcf: ""
 
 primers:
   trimming:
-    activate: false
     primers_fa1: ""
     primers_fa2: ""
     library_length: 0
@@ -23,14 +25,16 @@ primers:
 # Estimation of tumor mutational burden.
 mutational_burden:
   activate: false
-  # Size of the sequenced coding genome for TMB estimation
-  # Attention: when doing panel sequencing, set this to the
-  # CAPTURED coding genome, not the entire one!
-  coding_genome_size: 3.0e7
   events:
     - SOMATIC_TUMOR_LOW
     - SOMATIC_TUMOR_MEDIUM
     - SOMATIC_TUMOR_HIGH
+
+# Plotting of known mutational signatures
+mutational_signatures:
+  activate: false
+  events:
+    - some_id
 
 calling:
   delly:
@@ -50,35 +54,41 @@ calling:
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr005:
         threshold: 0.05
         varlociraptor: 
           - "PRESENT"
         filter: dummy
+        desc: Dummy variants
       fdr01:
         threshold: 0.1
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr015:
         threshold: 0.15
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr02:
         threshold: 0.2
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr025:
         threshold: 0.25
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr03:
         threshold: 0.3
         varlociraptor: 
@@ -91,24 +101,28 @@ calling:
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr04:
         threshold: 0.4
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr045:
         threshold: 0.45
         varlociraptor: 
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
       fdr10:
         threshold: 1.0
         varlociraptor:
           - "PRESENT"
         filter:
           - dummy
+        desc: Dummy variants
 
 
 
@@ -118,12 +132,19 @@ annotations:
     known: resources/variation.vcf.gz
   dgidb:
     activate: false
+  vep:
+    candidate_calls:
+      params: ""
+      plugins: []
+    final_calls:
+      params: --everything
+      plugins: []
 
 
 params:
   cutadapt: ""
   picard:
-    MarkDuplicates: "VALIDATION_STRINGENCY=lenient"
+    MarkDuplicates: "--VALIDATION_STRINGENCY lenient"
   gatk:
     BaseRecalibrator: ""
   varlociraptor:
@@ -144,9 +165,27 @@ benchmarking:
   activate: true
 
 
+tables:
+  activate: false
+  # vembrane expression to generate the table
+  output:
+    expression: "INDEX, CHROM, POS, REF, ALT[0], ANN['Consequence'], ANN['IMPACT'], ANN['SYMBOL'], ANN['Feature']"
+    genotype: true
+    coverage: true
+    event_prob: true
+  generate_excel: true
+
+gene_coverage:
+  min_avg_coverage: 5
+
 report:
   activate: false
   max_read_depth: 250
   stratify:
     activate: false
     by-column: condition
+
+custom_alignment_properties:
+  activate: false
+  column: "panel"
+  tsv: ""

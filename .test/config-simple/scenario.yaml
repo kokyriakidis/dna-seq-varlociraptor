@@ -1,0 +1,15 @@
+# simple isolated per-sample calling
+
+samples:
+  x:
+    resolution: 0.1
+    universe: "[0.0,1.0]"
+  y:
+    resolution: 0.1
+    universe: "[0.0,1.0]"
+
+
+events:
+  x: "x:]0.0,1.0] & y:0.0"
+  y: "y:]0.0,1.0] & x:0.0"
+  both: "y:]0.0,1.0] & x:]0.0,1.0]"

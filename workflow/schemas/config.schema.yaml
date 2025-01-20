@@ -5,10 +5,27 @@ description: snakemake configuration file
 type: object
 
 definitions:
+  aux-file:
+    type: object
+    additionalProperties:
+      anyOf:
+        - type: string
   filterentry:
     type: object
     additionalProperties:
-      type: string
+      anyOf:
+        - type: string
+        - type: "null"
+        - type: object
+          properties:
+            aux-files:
+              $ref: "#/definitions/aux-file"
+              description: "a map of <name: string> pairs"
+            expression:
+              type: string
+          required:
+            - aux-files
+            - expression
   evententry:
     type: object
     properties:
@@ -22,19 +39,36 @@ definitions:
           - type: array
             items:
               type: string
+      desc:
+        type: string
+      labels:
+        type: object
+      subcategory:
+        type: string
+      sort:
+        type: array
+        items:
+          type: string
       local:
         type: boolean
       threshold:
-        type: boolean
+        type: number
+        minimum: 0.0
+        maximum: 1.0
 
 properties:
   samples:
     type: string
   units:
     type: string
+  groups:
+    type: string
 
   target_regions:
-    type: string
+    anyOf:
+      - type: string
+      - type: "null"
+      - type: array
 
   ref:
     type: object
@@ -72,11 +106,17 @@ properties:
           library_length:
             type: integer
 
+  gene_coverage:
+    type: object
+    properties:
+      min_avg_coverage:
+        type: integer
+
   report:
     type: object
-    activate:
-      type: boolean
     properties:
+      activate:
+        type: boolean
       stratify:
         type: object
         properties:
@@ -93,6 +133,22 @@ properties:
       - activate
       - max_read_depth
 
+  population:
+    type: object
+    properties:
+      db:
+        type: object
+        properties:
+          activate:
+            type: boolean
+          path:
+            type: string
+          events:
+            type: array
+            items: 
+              type: string
+        required:
+          - activate
 
   tables:
     type: object
@@ -102,14 +158,21 @@ properties:
       output:
         type: object
         properties:
-          expression:
-            type: string
-          genotype:
-            type: boolean
-          coverage:
-            type: boolean
           event_prob:
             type: boolean
+          observations:
+            type: boolean
+          annotation_fields:
+            type: array
+            items: 
+               anyOf:
+                - type: string
+                - type: object
+                  properties:
+                    name:
+                      type: string
+                    expr:
+                      type: string
     generate_excel:
       type: boolean
     required:
@@ -120,17 +183,16 @@ properties:
     properties:
       activate:
         type: boolean
-      coding_genome_size:
-        # TODO allow integer here!
-        type: string
-      events:
-        type: array
-        items: 
-          type: string
     required:
       - activate
-      - coding_genome_size
-      - events
+
+  mutational_signatures:
+    type: object
+    properties:
+      activate:
+        type: boolean
+    required:
+      - activate
 
 
   calling:
@@ -160,11 +222,17 @@ properties:
             maximum: 1.0
           local:
             type: boolean
+          mode:
+            type: string
+            enum: 
+              - local-smart
+              - local-strict
+              - global-smart
+              - global-strict
           events:
             $ref: "#/definitions/evententry"
             description: "a map of <eventname: event> pairs"
         required:
-          - threshold
           - events
     required:
       - delly
@@ -202,15 +270,31 @@ properties:
               type: string
       vep:
         properties:
-          params:
-            type: string
-          plugins:
-            type: array
-            items:
-              type: string
+          candidate_calls:
+            properties:
+              params:
+                type: string
+              plugins:
+                type: array
+                items:
+                  type: string
+            required:
+              - params
+              - plugins
+          final_calls:
+            properties:
+              params:
+                type: string
+              plugins:
+                type: array
+                items:
+                  type: string
+            required:
+              - params
+              - plugins
         required:
-          - params
-          - plugins
+          - candidate_calls
+          - final_calls
     required:
       - vep
       - vcfs
@@ -263,6 +347,17 @@ properties:
       - freebayes
       - varlociraptor
 
+  custom_alignment_properties:
+    type: object
+    properties:
+      activate:
+        type: boolean
+      column:
+        type: string
+      tsv:
+        type: string
+
+
 required:
   - samples
   - units
@@ -271,3 +366,4 @@ required:
   - calling
   - params
   - annotations
+  - custom_alignment_properties

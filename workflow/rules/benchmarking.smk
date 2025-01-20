@@ -1,4 +1,5 @@
-ruleorder: chm_eval_sample > map_reads
+# TODO Is this ruleorder of any use?!
+ruleorder: chm_eval_sample > map_reads_bwa
 
 
 rule gather_benchmark_calls:
@@ -10,9 +11,9 @@ rule gather_benchmark_calls:
     log:
         "logs/gather-benchmark-calls/{group}.log",
     params:
-        "-a -Ob",
+        extra="-a",
     wrapper:
-        "0.67.0/bio/bcftools/concat"
+        "v2.3.2/bio/bcftools/concat"
 
 
 rule chm_eval_sample:
@@ -20,9 +21,9 @@ rule chm_eval_sample:
         bam="resources/chm.bam",
     log:
         "logs/benchmarking/chm-eval-sample.log",
-    cache: True
+    cache: "omit-software"
     wrapper:
-        "master/bio/benchmark/chm-eval-sample"
+        "v2.3.2/bio/benchmark/chm-eval-sample"
 
 
 rule chm_namesort:
@@ -36,7 +37,7 @@ rule chm_namesort:
         "logs/benchmarking/samtools-namesort.log",
     threads: workflow.cores - 1
     wrapper:
-        "0.63.0/bio/samtools/sort"
+        "v2.3.2/bio/samtools/sort"
 
 
 rule chm_to_fastq:
@@ -64,14 +65,14 @@ rule chm_eval_kit:
         "logs/benchmarking/chm-eval-kit.log",
     cache: True
     wrapper:
-        "0.63.0/bio/benchmark/chm-eval-kit"
+        "v2.3.2/bio/benchmark/chm-eval-kit"
 
 
 rule chromosome_map:
     input:
-        "resources/genome.fasta.fai",
+        genome_fai,
     output:
-        "resources/genome.chrmap.txt",
+        f"resources/{genome_name}.chrmap.txt",
     log:
         "logs/benchmarking/chromosome-map.log",
     conda:
@@ -83,7 +84,7 @@ rule chromosome_map:
 rule rename_chromosomes:
     input:
         bcf="results/final-calls/chm.{query}.fdr-controlled.bcf",
-        map="resources/genome.chrmap.txt",
+        map=f"resources/{genome_name}.chrmap.txt",
     output:
         "benchmarking/{query}.chr-mapped.vcf",
     params:
@@ -110,4 +111,4 @@ rule chm_eval:
     log:
         "logs/benchmarking/{query}.chm-eval.log",
     wrapper:
-        "0.63.0/bio/benchmark/chm-eval"
+        "v2.3.2/bio/benchmark/chm-eval"
